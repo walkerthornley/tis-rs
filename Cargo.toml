@@ -1,6 +1,6 @@
 [package]
 name = "tis-rs"
-version = "0.0.0"
+version = "0.0.1"
 publish = false
 authors = ["Walker Thornley <walker.thornley@telco.in>"]
 edition = "2024"

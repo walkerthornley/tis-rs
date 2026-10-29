@@ -48,7 +48,7 @@ pub async fn run(runs: Vec<(config::Run, Prepare)>) -> Report {
                 for (field, name) in run.outputs {
                     let Some(name) = name else { continue };
                     let value = output.get(&field).cloned().unwrap_or(Value::Null);
-                    debug!(parent: &span, output = name, %value, "stored");
+                    debug!(parent: &span, output = name, "stored");
                     stored.insert(name, value);
                 }
                 info!(parent: &span, %elapsed, "passed");

@@ -117,5 +117,5 @@ steps:
 
 Run results are logged with `tracing` under the `tis_rs` target. `info`
 covers each step starting, passing or failing, and the totals. `debug` adds
-each output stored. Each step runs inside a `step{name=…}` span, so the
+the name of each output stored, but not its value. Each step runs inside a `step{name=…}` span, so the
 suite's own logs from inside a step carry the step's name.
