@@ -1,6 +1,6 @@
 [package]
 name = "tis-rs"
-version = "0.0.1"
+version = "0.0.2"
 publish = false
 authors = ["Walker Thornley <walker.thornley@telco.in>"]
 edition = "2024"
@@ -15,3 +15,4 @@ tracing = "0.1.37"
 
 [dev-dependencies]
 tokio = { version = "1.21.2", features = ["macros", "rt"] }
+tracing-subscriber = "0.3"

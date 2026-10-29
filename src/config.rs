@@ -126,9 +126,67 @@ pub fn parse(text: &str, defaults: &Map<String, Value>) -> Result<Vec<Run>, Stri
 }
 
 /// Defaults given on the command line, as a JSON object like a config's
-/// `defaults`. Fits clap's `value_parser`.
+/// `defaults`. Fits clap's `value_parser`. Its error doesn't quote the text,
+/// which is where a secret goes.
 pub fn parse_defaults(json: &str) -> Result<Map<String, Value>, String> {
-    serde_json::from_str(json).map_err(|err| format!("expected a JSON object: {err}"))
+    // Read as any JSON first: serde_json's syntax errors say where the text
+    // went wrong, but its type errors quote it.
+    let not =
+        match serde_json::from_str(json).map_err(|err| format!("expected a JSON object: {err}"))? {
+            Value::Object(defaults) => return Ok(defaults),
+            Value::Null => "null",
+            Value::Bool(_) => "a boolean",
+            Value::Number(_) => "a number",
+            Value::String(_) => "a string",
+            Value::Array(_) => "an array",
+        };
+    Err(format!("expected a JSON object, not {not}"))
+}
+
+/// Keeps the values of defaults given at run time out of what's reported,
+/// putting `defaults.<name>` where one was. Only those, as that's where a
+/// secret goes: the config's own are in the config for anyone to read.
+pub struct Redact {
+    /// Each string in a default, as written and as `{:?}` escapes it, with
+    /// what replaces it. Longest first, so a value inside another goes last.
+    values: Vec<(String, String)>,
+}
+
+impl Redact {
+    pub fn new(defaults: &Map<String, Value>) -> Self {
+        let mut values = Vec::new();
+        for (name, value) in defaults {
+            for raw in strings(value) {
+                // Serde's errors quote a string escaped, as `{:?}` does.
+                let escaped = format!("{raw:?}");
+                let escaped = &escaped[1..escaped.len() - 1];
+                for form in [raw, escaped] {
+                    if !form.is_empty() {
+                        values.push((form.to_owned(), format!("defaults.{name}")));
+                    }
+                }
+            }
+        }
+        values.sort_by_key(|(value, _)| std::cmp::Reverse(value.len()));
+        Self { values }
+    }
+
+    pub fn apply(&self, mut message: String) -> String {
+        for (value, reference) in &self.values {
+            message = message.replace(value, reference);
+        }
+        message
+    }
+}
+
+/// Every string in `value`, however deep.
+fn strings(value: &Value) -> Vec<&str> {
+    match value {
+        Value::String(s) => vec![s],
+        Value::Array(items) => items.iter().flat_map(strings).collect(),
+        Value::Object(fields) => fields.values().flat_map(strings).collect(),
+        _ => Vec::new(),
+    }
 }
 
 /// The names of the outputs `params` use, as `"outputs.<name>"`.
@@ -243,5 +301,20 @@ mod tests {
             json!({"from": "+3", "to": "+2", "via": "+4"})
         );
         assert!(parse_defaults(r#"["+3"]"#).is_err());
+    }
+
+    #[test]
+    fn defaults_given_at_run_time_are_not_quoted_back() {
+        let err = parse_defaults(r#""0xab""#).expect_err("not an object");
+        assert_eq!(err, "expected a JSON object, not a string");
+
+        let defaults =
+            Map::from_iter([("key".to_owned(), json!(["0xab", r#"a "quoted" one"#, ""]))]);
+        assert_eq!(
+            Redact::new(&defaults).apply(
+                r#"saw 0xab, then string "a \"quoted\" one", then `a "quoted" one`"#.to_owned()
+            ),
+            r#"saw defaults.key, then string "defaults.key", then `defaults.key`"#
+        );
     }
 }

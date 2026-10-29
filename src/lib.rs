@@ -56,6 +56,8 @@ struct Registered {
 pub struct Config {
     /// Each run, with how to prepare it once earlier runs' outputs are in.
     runs: Vec<(config::Run, Prepare)>,
+    /// The defaults it was read with, to keep out of failures.
+    redact: config::Redact,
 }
 
 impl Tis {
@@ -137,12 +139,14 @@ impl Tis {
     /// Reads and checks a whole config, JSON if it starts with `{` and YAML
     /// otherwise, so a mistake in it fails before any step starts. `defaults`,
     /// such as from the command line, are added to the config's, overriding
-    /// any it names too.
+    /// any it names too. No value in `defaults` is quoted in an error, or in a
+    /// failure when the config runs: each reads as `defaults.<name>`.
     pub fn parse_config(
         &self,
         text: &str,
         defaults: &Map<String, Value>,
     ) -> Result<Config, String> {
+        let redact = config::Redact::new(defaults);
         let runs = config::parse(text, defaults)?;
         if runs.is_empty() {
             return Err("it names no steps".to_owned());
@@ -158,12 +162,12 @@ impl Tis {
                 if config::outputs_used(&run.params).is_empty()
                     && let Err(err) = runner::prepare_run(&run, &Map::new(), step.prepare)
                 {
-                    return Err(format!("{}: {err}", run.label));
+                    return Err(redact.apply(format!("{}: {err}", run.label)));
                 }
                 Ok((run, step.prepare))
             })
             .collect::<Result<_, _>>()?;
-        Ok(Config { runs })
+        Ok(Config { runs, redact })
     }
 
     /// [`Tis::parse_config`] on the file at `path`, or on stdin if `path` is
@@ -190,7 +194,7 @@ impl Tis {
     /// panics fails, and its panic is logged with its result rather than
     /// printed. Runs that use the outputs of a failed run fail too.
     pub async fn run(&self, config: Config) -> Report {
-        runner::run(config.runs).await
+        runner::run(config.runs, &config.redact).await
     }
 }
 
@@ -328,5 +332,23 @@ mod tests {
         assert_eq!(report.total, 5);
         assert_eq!(report.failed, ["expect[1]", "add[1]", "expect[2]"]);
         assert!(!report.passed());
+    }
+
+    /// The run-time half is `tests/run_time_defaults.rs`, as it reads logs.
+    #[test]
+    fn defaults_given_at_run_time_are_not_quoted_in_errors() {
+        let defaults = Map::from_iter([("secret".to_owned(), Value::from("0xab \"cd\""))]);
+        // Serde quotes the string it wanted a number in place of.
+        let err = tis()
+            .parse_config(
+                r#"{"steps": [{"add": {"a": "defaults.secret", "b": 1}}]}"#,
+                &defaults,
+            )
+            .err()
+            .expect("`a` is a number");
+        assert!(
+            err.contains("defaults.secret") && !err.contains("0xab"),
+            "{err}"
+        );
     }
 }

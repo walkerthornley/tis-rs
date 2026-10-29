@@ -86,6 +86,12 @@ writing a config can see the steps and their parameters. Errors suggest
 running `list`, so expose it under that name. `parse_defaults` parses defaults
 given on the command line and works as a clap `value_parser`.
 
+Defaults given to `parse_config` or `read_config` are where a secret such as
+a private key goes, so their values are never reported back. Every string in
+them reads as `defaults.<name>` in errors and in logged failures, and
+`parse_defaults` doesn't quote its input. The config's own defaults are
+reported as they are, being in the config already.
+
 ## Config
 
 ```yaml

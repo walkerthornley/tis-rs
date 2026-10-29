@@ -7,7 +7,7 @@ use serde_json::{Map, Value};
 use tracing::instrument::Instrumented;
 use tracing::{Instrument, debug, info, info_span};
 
-use crate::config;
+use crate::config::{self, Redact};
 use crate::step::{Prepare, Run};
 
 /// How a config's runs went.
@@ -25,7 +25,7 @@ impl Report {
     }
 }
 
-pub async fn run(runs: Vec<(config::Run, Prepare)>) -> Report {
+pub async fn run(runs: Vec<(config::Run, Prepare)>, redact: &Redact) -> Report {
     static CAPTURE_STEP_PANICS: Once = Once::new();
     CAPTURE_STEP_PANICS.call_once(capture_step_panics);
 
@@ -54,6 +54,9 @@ pub async fn run(runs: Vec<(config::Run, Prepare)>) -> Report {
                 info!(parent: &span, %elapsed, "passed");
             }
             Err(failure) => {
+                // A step's panic, or its parameters failing to deserialize,
+                // can quote what it was given.
+                let failure = redact.apply(failure);
                 info!(parent: &span, %elapsed, %failure, "failed");
                 failed.push(run.label);
             }
