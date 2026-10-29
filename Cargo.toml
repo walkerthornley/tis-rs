@@ -2,7 +2,7 @@
 name = "tis-rs"
 version = "0.0.0"
 publish = false
-authors = ["Walker Thornley <thornleywalker@gmail.com>"]
+authors = ["Walker Thornley <walker.thornley@telco.in>"]
 edition = "2024"
 
 [dependencies]

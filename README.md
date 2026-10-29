@@ -6,8 +6,6 @@ suite defines its steps, registers them with a `Tis`, and hands it a config.
 time, passes outputs from earlier steps to later ones, and reports which
 failed.
 
-`telcoin_api_tests`, in the telcoin repo, is built on it.
-
 ## Steps
 
 A step is a struct whose fields are its parameters, as a config gives them,
